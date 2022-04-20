@@ -73,10 +73,10 @@ class ServiceSystem:
                     channel.is_active = False
                     if channel.index_request in self.request_channels_pair.keys():
                         del self.request_channels_pair[channel.index_request]
-        self.support()
+        self.support(time_coming_request)
 
     # Метод для взаимопомощи между каналами
-    def support(self):
+    def support(self, time_coming_request):
         for list_channels in self.request_channels_pair.values():
             # Если найдутся свободные каналы
             recalculate_time = False
@@ -87,7 +87,7 @@ class ServiceSystem:
                     if ch.is_active == False:
                         ch.is_active = True
                         ch.index_request = list_channels[0].index_request
-                        ch.time_coming_request = list_channels[0].time_coming_request
+                        ch.time_coming_request = ch.time_coming_request + ch.time_busy
                         list_channels.append(ch)
                         recalculate_time = True
 
@@ -114,12 +114,19 @@ class ServiceSystem:
         self.update_channels(time_coming_request)
 
         # Перераспределение
-        self.redistribution_channels()
+        self.redistribution_channels(time_coming_request)
 
         free_channels = self.find_free_channels()
+
+        #Число занятых каналов
+        self.busy_channels.append(self.number_of_channels - free_channels)
+
         #Обновление кол-ва заявок
         self.update_count_request(free_channels)
 
+        time_busy= self.time_calculator.calculate_time_busy(self.base_characteristics.l,
+                                                                      self.base_characteristics.mu,
+                                                                      free_channels)
         # В цикле ставится заявка на обслуживание
         for channel in self.channels:
             if free_channels == 0:
@@ -136,7 +143,7 @@ class ServiceSystem:
 
 
     # Перераспределение каналов
-    def redistribution_channels(self):
+    def redistribution_channels(self, time_coming_request):
         # Кол-во заявок в системе
         count_request_in_system = len(self.request_channels_pair.keys())
         if count_request_in_system + 1 <= self.number_of_channels:
@@ -152,6 +159,7 @@ class ServiceSystem:
                                                                                       len(list_channels))
                         # Пересчитываем время для каналов, от которых оторвали один канал
                         for channel in list_channels:
+                            channel.time_coming_request = time_coming_request
                             channel.time_busy = time_busy_channels
 
 class TimeCalculator:
@@ -165,7 +173,7 @@ class TimeCalculator:
             number_of_channels = l
         elif number_of_channels == 0:
             number_of_channels = 1
-        return ((-1 / (mu)) * math.log(random.random())) / number_of_channels
+        return ((-1 / (number_of_channels * mu)) * math.log(random.random()))
 
     # Метод для расчета времени прихода заявки
     def calculate_time_coming(self, lamda):
@@ -188,14 +196,14 @@ lambda = V/I
 """
 class BaseCharacteristics:
     def __init__(self):
-        self.mu_single = 1/2
-        self.a = 35
-        self.p = 0.57
-        self.V = 1700/60
-        self.q = 3
+        self.mu_single = 1/3
+        self.a = 30
+        self.p = 0.51
+        self.V = 1600 / 60
+        self.q = 2
         self.I = 5
-        self.l = 3
-        self.n = [3, 4, 5, 6]
+        self.l = 2
+        self.n = [2, 3, 4]
         self.mu = self.mu_single * self.p * self.q
         self.lamda = self.V / self.I
 
@@ -207,12 +215,11 @@ if __name__ == '__main__':
 
     # Запускаем основной цикл
     for k in range(time_calculator.time_modelling):
-        service_system.busy_channels.append(service_system.find_busy_channels())
+        #service_system.busy_channels.append(service_system.find_busy_channels())
         time_coming = time_calculator.calculate_time_coming(base_characteristics.lamda)
         time_busy_channels = time_calculator.calculate_time_busy(
              base_characteristics.l, base_characteristics.mu, service_system.find_free_channels())
         service_system.add_request(time_coming, time_busy_channels, k)
-
 
     print(f"Число заявок:{service_system.count_request}")
     print(f"Число выполненых заявок:{service_system.count_request_complete}")
